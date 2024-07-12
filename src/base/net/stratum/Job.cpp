@@ -36,6 +36,7 @@
 #include "base/tools/cryptonote/BlockTemplate.h"
 #include "base/tools/cryptonote/Signatures.h"
 #include "base/crypto/keccak.h"
+#include <iostream>
 
 
 xmrig::Job::Job(bool nicehash, const Algorithm &algorithm, const String &clientId) :
@@ -402,6 +403,7 @@ void xmrig::Job::generateMinerSignature(const uint8_t* blob, size_t size, uint8_
     memset(tmp + nonceOffset() + nonceSize(), 0, BlockTemplate::kSignatureSize);
 
     uint8_t prefix_hash[32];
+    //std::cout << "validated_block 1" << m_ephPublicKey << std::endl;
     xmrig::keccak(tmp, static_cast<int>(size), prefix_hash, sizeof(prefix_hash));
     xmrig::generate_signature(prefix_hash, m_ephPublicKey, m_ephSecretKey, out_sig);
 }

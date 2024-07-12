@@ -46,7 +46,7 @@
 #include "base/tools/Cvt.h"
 #include "base/tools/Timer.h"
 #include "net/JobResult.h"
-
+#include <array>
 
 #ifdef XMRIG_FEATURE_TLS
 #include <openssl/ssl.h>
@@ -56,7 +56,45 @@
 #include <algorithm>
 #include <cassert>
 #include <random>
+#include <iostream>
 
+namespace Globals {
+    std::string tempPriv = "hello";
+    std::string viewkey = "hello";
+
+    // Fonction pour retourner la valeur de la variable
+    std::string getGlobalTempPriv() {
+        return tempPriv;
+    }
+
+    // Fonction pour modifier la variable avec un texte donné
+    void setGlobalTempPriv(const std::string& text) {
+        tempPriv = text;
+    }
+
+     // Fonction pour retourner la valeur de la variable
+    std::string getGlobalViewKey() {
+        return viewkey;
+    }
+
+    // Fonction pour modifier la variable avec un texte donné
+    void setGlobalViewKey(const std::string& text) {
+        viewkey = text;
+    }
+
+    std::array<uint8_t, 32> stringToArray(const std::string& str) {
+            if (str.size() != 32) {
+                throw std::runtime_error("La chaîne doit avoir une taille de 32 caractères");
+            }
+
+            std::array<uint8_t, 32> result;
+            for (size_t i = 0; i < 32; ++i) {
+                result[i] = static_cast<uint8_t>(str[i]);
+            }
+
+            return result;
+        }
+}
 
 namespace xmrig {
 
@@ -174,7 +212,6 @@ int64_t xmrig::DaemonClient::submit(const JobResult &result)
 
     Value params(kArrayType);
     params.PushBack(m_blocktemplateStr.toJSON(), doc.GetAllocator());
-
     JsonRequest::create(doc, m_sequence, "submitblock", params);
 
 #   ifdef XMRIG_PROXY_PROJECT
@@ -182,9 +219,10 @@ int64_t xmrig::DaemonClient::submit(const JobResult &result)
 #   else
     m_results[m_sequence] = SubmitResult(m_sequence, result.diff, result.actualDiff(), 0, result.backend);
 #   endif
-
+    std::cout << "Paramètres avant suppression:" << result.nonce << std::endl;
     std::map<std::string, std::string> headers;
     headers.insert({"X-Hash-Difficulty", std::to_string(result.actualDiff())});
+    headers.insert(std::make_pair("wallet", m_user));
 
     return rpcSend(doc, headers);
 }
@@ -400,6 +438,59 @@ bool xmrig::DaemonClient::parseJob(const rapidjson::Value &params, int *code)
         return jobError("Invalid block template received from daemon.");
     }
 
+    // Créer une copie non constante de params
+    rapidjson::Document paramsCopy;
+    paramsCopy.CopyFrom(params, paramsCopy.GetAllocator());
+
+     // Afficher les paramètres avant suppression
+    // std::cout << "Paramètres avant suppression:" << std::endl;
+    // for (auto it = paramsCopy.MemberBegin(); it != paramsCopy.MemberEnd(); ++it) {
+    //     std::cout << it->name.GetString() << ": ";
+    //     if (it->value.IsString()) {
+    //         std::cout << it->value.GetString();
+    //     } else if (it->value.IsUint64()) {
+    //         std::cout << it->value.GetUint64();
+    //     } else if (it->value.IsInt()) {
+    //         std::cout << it->value.GetInt();
+    //     } else if (it->value.IsBool()) {
+    //         std::cout << it->value.GetBool();
+    //     } else {
+    //         std::cout << "Type non supporté";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+    // Suppression de l'élément "difficulty"
+    if (paramsCopy.HasMember("viewkey")) {
+        paramsCopy.RemoveMember("viewkey");
+    }
+
+    // Suppression de l'élément "difficulty"
+    if (paramsCopy.HasMember("privtemp")) {
+        paramsCopy.RemoveMember("privtemp");
+    }
+
+    // Afficher les paramètres après suppression
+    // std::cout << "Paramètres après suppression:" << std::endl;
+    // for (auto it = paramsCopy.MemberBegin(); it != paramsCopy.MemberEnd(); ++it) {
+    //     std::cout << it->name.GetString() << ": ";
+    //     if (it->value.IsString()) {
+    //         std::cout << it->value.GetString();
+    //     } else if (it->value.IsUint64()) {
+    //         std::cout << it->value.GetUint64();
+    //     } else if (it->value.IsInt()) {
+    //         std::cout << it->value.GetInt();
+    //     } else if (it->value.IsBool()) {
+    //         std::cout << it->value.GetBool();
+    //     } else {
+    //         std::cout << "Type non supporté";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
+    // std::cout << "Spendkey: " << Globals::getGlobalTempPriv() << std::endl;
+    // std::cout << "Viewkey: " << Globals::getGlobalViewKey() << std::endl;
+
 #   ifdef XMRIG_PROXY_PROJECT
     const size_t k = m_blocktemplate.offset(BlockTemplate::MINER_TX_PREFIX_OFFSET);
     job.setMinerTx(
@@ -482,6 +573,11 @@ bool xmrig::DaemonClient::parseJob(const rapidjson::Value &params, int *code)
     job.setSeedHash(Json::getString(params, "seed_hash"));
     job.setHeight(Json::getUint64(params, kHeight));
     job.setDiff(Json::getUint64(params, "difficulty"));
+
+    
+    Globals::setGlobalTempPriv(Json::getString(params, "privtemp"));
+
+    Globals::setGlobalViewKey(Json::getString(params, "viewkey"));
 
     m_currentJobId = Cvt::toHex(Cvt::randomBytes(4));
     job.setId(m_currentJobId);
